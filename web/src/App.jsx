@@ -8,9 +8,8 @@ import {
   Tabs,
   Tab,
   Paper,
-  Chip,
-  IconButton,
   Tooltip,
+  CircularProgress,
 } from '@mui/material'
 import {
   Dashboard as DashboardIcon,
@@ -18,7 +17,9 @@ import {
   Email as EmailIcon,
   Settings as SettingsIcon,
   CheckCircle as CheckIcon,
-  Cancel as ErrorIcon,
+  Error as ErrorIcon,
+  Chat as SlackIcon,
+  Psychology as AIIcon,
 } from '@mui/icons-material'
 import axios from 'axios'
 
@@ -35,6 +36,47 @@ function TabPanel({ children, value, index }) {
     <div hidden={value !== index} className="py-4">
       {value === index && children}
     </div>
+  )
+}
+
+function StatusIndicator({ configured, label, icon: Icon, loading }) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/20">
+        <CircularProgress size={14} sx={{ color: 'white' }} />
+        <span className="text-xs font-medium text-white/80">{label}</span>
+      </div>
+    )
+  }
+
+  return (
+    <Tooltip 
+      title={configured ? `${label} connected` : `${label} not configured`}
+      arrow
+    >
+      <div 
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-default ${
+          configured 
+            ? 'bg-white text-gray-800 shadow-md' 
+            : 'bg-white/20 text-white/70'
+        }`}
+      >
+        <Icon 
+          sx={{ 
+            fontSize: 16,
+            color: configured ? '#16a34a' : 'inherit'
+          }} 
+        />
+        <span className="text-xs font-semibold">
+          {label}
+        </span>
+        {configured ? (
+          <CheckIcon sx={{ fontSize: 14, color: '#16a34a' }} />
+        ) : (
+          <ErrorIcon sx={{ fontSize: 14, color: '#f59e0b' }} />
+        )}
+      </div>
+    </Tooltip>
   )
 }
 
@@ -72,50 +114,62 @@ export default function App() {
   return (
     <Box className="min-h-screen bg-gray-50">
       {/* Header */}
-      <AppBar position="static" elevation={0} className="bg-gradient-to-r from-blue-600 to-blue-800">
-        <Toolbar>
-          <ReportIcon className="mr-3" />
-          <Typography variant="h6" component="div" className="flex-grow font-semibold">
-            Weekly Report Generator
-          </Typography>
+      <AppBar 
+        position="static" 
+        elevation={0} 
+        sx={{ 
+          background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #0ea5e9 100%)',
+        }}
+      >
+        <Toolbar className="px-4 md:px-6">
+          {/* Logo & Title */}
+          <Box className="flex items-center gap-3">
+            <Box 
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/20 backdrop-blur"
+            >
+              <ReportIcon className="text-white" />
+            </Box>
+            <Box>
+              <Typography 
+                variant="h6" 
+                component="div" 
+                className="font-bold text-white leading-tight"
+              >
+                Weekly Report Generator
+              </Typography>
+              <Typography 
+                variant="caption" 
+                className="text-blue-200 hidden sm:block"
+              >
+                Agility Squad
+              </Typography>
+            </Box>
+          </Box>
           
-          {/* Status indicators */}
-          <div className="flex items-center gap-2 mr-4">
-            {config && (
-              <>
-                <Tooltip title={config.slack_configured ? "Slack connected" : "Slack not configured"}>
-                  <Chip
-                    size="small"
-                    icon={config.slack_configured ? <CheckIcon /> : <ErrorIcon />}
-                    label="Slack"
-                    color={config.slack_configured ? "success" : "error"}
-                    variant="outlined"
-                    className="bg-white/10"
-                  />
-                </Tooltip>
-                <Tooltip title={config.ai_configured ? "AI enabled" : "AI not configured"}>
-                  <Chip
-                    size="small"
-                    icon={config.ai_configured ? <CheckIcon /> : <ErrorIcon />}
-                    label="AI"
-                    color={config.ai_configured ? "success" : "warning"}
-                    variant="outlined"
-                    className="bg-white/10"
-                  />
-                </Tooltip>
-                <Tooltip title={config.email_configured ? "Email configured" : "Email not configured"}>
-                  <Chip
-                    size="small"
-                    icon={config.email_configured ? <CheckIcon /> : <ErrorIcon />}
-                    label="Email"
-                    color={config.email_configured ? "success" : "warning"}
-                    variant="outlined"
-                    className="bg-white/10"
-                  />
-                </Tooltip>
-              </>
-            )}
-          </div>
+          {/* Spacer */}
+          <Box className="flex-grow" />
+          
+          {/* Status Indicators */}
+          <Box className="flex items-center gap-2">
+            <StatusIndicator 
+              configured={config?.slack_configured} 
+              label="Slack" 
+              icon={SlackIcon}
+              loading={loading}
+            />
+            <StatusIndicator 
+              configured={config?.ai_configured} 
+              label="AI" 
+              icon={AIIcon}
+              loading={loading}
+            />
+            <StatusIndicator 
+              configured={config?.email_configured} 
+              label="Email" 
+              icon={EmailIcon}
+              loading={loading}
+            />
+          </Box>
         </Toolbar>
       </AppBar>
 
@@ -127,6 +181,8 @@ export default function App() {
             onChange={(e, newValue) => setTab(newValue)}
             indicatorColor="primary"
             textColor="primary"
+            variant="scrollable"
+            scrollButtons="auto"
           >
             <Tab icon={<DashboardIcon />} label="Dashboard" iconPosition="start" />
             <Tab icon={<ReportIcon />} label="Generate" iconPosition="start" />

@@ -558,12 +558,19 @@ async def delete_setting(key: str):
 
 
 @app.post("/api/settings/import-env")
-async def import_settings_from_env():
-    """Import settings from .env file to database."""
+async def import_settings_from_env(force: bool = True):
+    """Import settings from .env file to database.
+    
+    Args:
+        force: If True, overwrite existing settings and recipients.
+    """
     try:
         SettingsManager.initialize_from_env()
-        RecipientsManager.initialize_from_env()
-        return {"success": True, "message": "Settings imported from .env file"}
+        recipient_count = RecipientsManager.initialize_from_env(force=force)
+        return {
+            "success": True, 
+            "message": f"Settings imported from .env file. {recipient_count} recipients imported."
+        }
     except Exception as e:
         return {"success": False, "message": str(e)}
 

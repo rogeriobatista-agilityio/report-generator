@@ -140,11 +140,12 @@ class SettingsManager:
     
     @classmethod
     def initialize_from_env(cls):
-        """Initialize settings from environment variables (one-time migration)."""
+        """Initialize settings from environment variables (overwrites existing)."""
         import os
         from dotenv import load_dotenv
         
-        load_dotenv()
+        # Reload .env to get latest values
+        load_dotenv(override=True)
         
         env_mappings = {
             "SENDER_NAME": "sender_name",
@@ -160,7 +161,7 @@ class SettingsManager:
         
         for env_key, db_key in env_mappings.items():
             value = os.getenv(env_key)
-            if value and not cls.get(db_key):
+            if value:
                 cls.set(db_key, value, f"Imported from {env_key}")
 
 
@@ -270,17 +271,33 @@ class RecipientsManager:
             return emails
     
     @classmethod
-    def initialize_from_env(cls):
-        """Initialize recipients from environment variables (one-time migration)."""
+    def clear_all(cls):
+        """Delete all recipients from the database."""
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM recipients")
+    
+    @classmethod
+    def initialize_from_env(cls, force: bool = False):
+        """Initialize recipients from environment variables.
+        
+        Args:
+            force: If True, clear existing recipients before importing.
+        """
         import os
         import re
         from dotenv import load_dotenv
         
-        load_dotenv()
+        # Reload .env to get latest values
+        load_dotenv(override=True)
         
-        # Check if we already have recipients
-        if cls.get_all():
-            return
+        # Check if we already have recipients (unless forcing)
+        if not force and cls.get_all():
+            return 0
+        
+        # Clear existing if forcing
+        if force:
+            cls.clear_all()
         
         def parse_recipients(value: str) -> list[tuple[str, str]]:
             """Parse 'Name <email>' or 'email' format."""
@@ -302,15 +319,21 @@ class RecipientsManager:
             
             return results
         
+        count = 0
+        
         # Import TO recipients
         to_recipients = os.getenv("REPORT_RECIPIENTS_TO", "")
         for email, name in parse_recipients(to_recipients):
             cls.add(email, name, "to")
+            count += 1
         
         # Import CC recipients
         cc_recipients = os.getenv("REPORT_RECIPIENTS_CC", "")
         for email, name in parse_recipients(cc_recipients):
             cls.add(email, name, "cc")
+            count += 1
+        
+        return count
 
 
 # Report History Management
