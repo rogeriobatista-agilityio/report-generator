@@ -286,68 +286,6 @@ def from_template(template_file: str):
     console.print("\n[yellow]Custom template support coming soon![/yellow]")
 
 
-@cli.command()
-def schedule_info():
-    """Show information about scheduling the report generator."""
-    
-    info = """
-# Scheduling the Report Generator
-
-## Using Cron (macOS/Linux)
-
-To run the report generator every Friday at 5 PM:
-
-```bash
-0 17 * * 5 cd /path/to/report-generator && python -m src.cli generate --output /path/to/reports/report_$(date +\\%Y-\\%m-\\%d).txt
-```
-
-## Using launchd (macOS)
-
-Create a plist file at `~/Library/LaunchAgents/com.report-generator.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.report-generator</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/python3</string>
-        <string>-m</string>
-        <string>src.cli</string>
-        <string>generate</string>
-        <string>--output</string>
-        <string>/path/to/report.txt</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>/path/to/report-generator</string>
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Weekday</key>
-        <integer>5</integer>
-        <key>Hour</key>
-        <integer>17</integer>
-        <key>Minute</key>
-        <integer>0</integer>
-    </dict>
-</dict>
-</plist>
-```
-
-Then load it:
-```bash
-launchctl load ~/Library/LaunchAgents/com.report-generator.plist
-```
-
-## Using Task Scheduler (Windows)
-
-Use Task Scheduler to create a task that runs every Friday at 5 PM,
-executing: `python -m src.cli generate --output C:\\path\\to\\report.txt`
-"""
-    
-    console.print(Markdown(info))
 
 
 @cli.command()
