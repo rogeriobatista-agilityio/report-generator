@@ -1,5 +1,6 @@
 """
 Configuration management for the report generator.
+Supports loading from SQLite database with fallback to environment variables.
 """
 
 import os
@@ -11,6 +12,33 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def get_setting(key: str, default: str = None) -> Optional[str]:
+    """Get a setting from database first, then fall back to environment variable."""
+    try:
+        from src.database import SettingsManager
+        db_value = SettingsManager.get(key)
+        if db_value:
+            return db_value
+    except Exception:
+        pass  # Database not available, use env vars
+    
+    # Map database keys to environment variable names
+    env_mapping = {
+        "slack_bot_token": "SLACK_BOT_TOKEN",
+        "slack_channel_id": "SLACK_CHANNEL_ID",
+        "groq_api_key": "GROQ_API_KEY",
+        "sender_name": "SENDER_NAME",
+        "sender_email": "SENDER_EMAIL",
+        "email_provider": "EMAIL_PROVIDER",
+        "email_username": "EMAIL_USERNAME",
+        "email_password": "EMAIL_PASSWORD",
+        "report_output_dir": "REPORT_OUTPUT_DIR",
+    }
+    
+    env_key = env_mapping.get(key, key.upper())
+    return os.getenv(env_key, default)
+
+
 @dataclass
 class SlackConfig:
     """Slack API configuration."""
@@ -19,14 +47,14 @@ class SlackConfig:
 
     @classmethod
     def from_env(cls) -> "SlackConfig":
-        """Create configuration from environment variables."""
-        bot_token = os.getenv("SLACK_BOT_TOKEN")
-        channel_id = os.getenv("SLACK_CHANNEL_ID")
+        """Create configuration from database/environment variables."""
+        bot_token = get_setting("slack_bot_token")
+        channel_id = get_setting("slack_channel_id")
 
         if not bot_token:
-            raise ValueError("SLACK_BOT_TOKEN environment variable is required")
+            raise ValueError("SLACK_BOT_TOKEN is required (set in database or .env)")
         if not channel_id:
-            raise ValueError("SLACK_CHANNEL_ID environment variable is required")
+            raise ValueError("SLACK_CHANNEL_ID is required (set in database or .env)")
 
         return cls(bot_token=bot_token, channel_id=channel_id)
 
@@ -39,8 +67,8 @@ class GroqConfig:
 
     @classmethod
     def from_env(cls) -> "GroqConfig":
-        """Create configuration from environment variables."""
-        return cls(api_key=os.getenv("GROQ_API_KEY"))
+        """Create configuration from database/environment variables."""
+        return cls(api_key=get_setting("groq_api_key"))
 
     @property
     def is_available(self) -> bool:
@@ -58,15 +86,29 @@ class ReportConfig:
 
     @classmethod
     def from_env(cls) -> "ReportConfig":
-        """Create configuration from environment variables."""
-        sender_name = os.getenv("SENDER_NAME", "Report Generator")
-        sender_email = os.getenv("SENDER_EMAIL", "")
+        """Create configuration from database/environment variables."""
+        sender_name = get_setting("sender_name", "Report Generator")
+        sender_email = get_setting("sender_email", "")
         
-        recipients_to_str = os.getenv("REPORT_RECIPIENTS_TO", "")
-        recipients_to = [r.strip() for r in recipients_to_str.split(",") if r.strip()]
+        # Try to get recipients from database first
+        recipients_to = []
+        recipients_cc = []
         
-        recipients_cc_str = os.getenv("REPORT_RECIPIENTS_CC", "")
-        recipients_cc = [r.strip() for r in recipients_cc_str.split(",") if r.strip()]
+        try:
+            from src.database import RecipientsManager
+            recipients_to = RecipientsManager.get_email_list("to")
+            recipients_cc = RecipientsManager.get_email_list("cc")
+        except Exception:
+            pass
+        
+        # Fall back to environment variables if no database recipients
+        if not recipients_to:
+            recipients_to_str = os.getenv("REPORT_RECIPIENTS_TO", "")
+            recipients_to = [r.strip() for r in recipients_to_str.split(",") if r.strip()]
+        
+        if not recipients_cc:
+            recipients_cc_str = os.getenv("REPORT_RECIPIENTS_CC", "")
+            recipients_cc = [r.strip() for r in recipients_cc_str.split(",") if r.strip()]
 
         return cls(
             sender_name=sender_name,
@@ -90,11 +132,11 @@ class EmailConfig:
 
     @classmethod
     def from_env(cls) -> "EmailConfig":
-        """Create configuration from environment variables."""
+        """Create configuration from database/environment variables."""
         return cls(
-            provider=os.getenv("EMAIL_PROVIDER", "gmail"),
-            username=os.getenv("EMAIL_USERNAME", ""),
-            password=os.getenv("EMAIL_PASSWORD"),
+            provider=get_setting("email_provider", "gmail"),
+            username=get_setting("email_username", ""),
+            password=get_setting("email_password"),
         )
 
     @property
@@ -114,11 +156,11 @@ class AppConfig:
 
     @classmethod
     def from_env(cls) -> "AppConfig":
-        """Create all configurations from environment variables."""
+        """Create all configurations from database/environment variables."""
         return cls(
             slack=SlackConfig.from_env(),
             groq=GroqConfig.from_env(),
             report=ReportConfig.from_env(),
             email=EmailConfig.from_env(),
-            output_dir=os.getenv("REPORT_OUTPUT_DIR"),
+            output_dir=get_setting("report_output_dir", "reports"),
         )
