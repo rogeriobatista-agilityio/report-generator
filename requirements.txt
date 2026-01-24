@@ -1,0 +1,17 @@
+# Slack SDK
+slack-sdk>=3.27.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Date handling
+python-dateutil>=2.8.2
+
+# CLI interface
+click>=8.1.7
+
+# AI/LLM for summarization (optional)
+openai>=1.12.0
+
+# Rich console output
+rich>=13.7.0
