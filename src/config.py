@@ -16,9 +16,8 @@ def get_setting(key: str, default: str = None) -> Optional[str]:
     """Get a setting from database first, then fall back to environment variable."""
     try:
         from src.database import SettingsManager
-        db_value = SettingsManager.get(key)
-        if db_value:
-            return db_value
+        if SettingsManager.key_in_db(key):
+            return SettingsManager.get(key)
     except Exception:
         pass  # Database not available, use env vars
     

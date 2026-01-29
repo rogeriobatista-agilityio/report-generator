@@ -79,6 +79,28 @@ class PreviewResponse(BaseModel):
     date_range: Optional[str] = None
 
 
+class ThreadItem(BaseModel):
+    """A daily report thread for selection."""
+    thread_ts: str
+    date: str
+    header_text: str
+    posted_by: str
+    reply_count: int
+    reply_preview: list[dict]  # [{ user, text_snippet, timestamp }]
+
+
+class ThreadsResponse(BaseModel):
+    threads: list[ThreadItem]
+    date_range_start: str
+    date_range_end: str
+
+
+class GenerateFromSelectionRequest(BaseModel):
+    thread_ts_list: list[str]
+    use_ai: bool = True
+    notes: list[str] = []
+
+
 class ConfigResponse(BaseModel):
     slack_configured: bool
     ai_configured: bool
@@ -217,6 +239,116 @@ async def preview_messages(days: int = 7):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/threads", response_model=ThreadsResponse)
+async def get_threads_by_date_range(from_date: str, to_date: str):
+    """
+    Get daily report threads in a date range for selection.
+    Query params: from_date (YYYY-MM-DD), to_date (YYYY-MM-DD).
+    """
+    config = get_config()
+    try:
+        start = datetime.strptime(from_date, "%Y-%m-%d").replace(hour=0, minute=0, second=0, microsecond=0)
+        end = datetime.strptime(to_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999)
+        if start > end:
+            start, end = end, start
+        slack_client = SlackClient(config.slack)
+        daily_reports = slack_client.find_daily_report_threads(start, end)
+        threads_data = []
+        for report in daily_reports:
+            header = report['header']
+            replies = report['replies']
+            thread_ts = report.get('thread_ts') or (header.ts if hasattr(header, 'ts') else str(header.timestamp.timestamp()))
+            reply_preview = [
+                {
+                    "user": r.user_name,
+                    "text_snippet": (r.text[:150] + "…") if len(r.text) > 150 else r.text,
+                    "timestamp": r.timestamp.isoformat(),
+                }
+                for r in replies[:3]
+            ]
+            threads_data.append(ThreadItem(
+                thread_ts=thread_ts,
+                date=report['date'].strftime("%Y-%m-%d"),
+                header_text=header.text[:300],
+                posted_by=header.user_name,
+                reply_count=len(replies),
+                reply_preview=reply_preview,
+            ))
+        return ThreadsResponse(
+            threads=threads_data,
+            date_range_start=from_date,
+            date_range_end=to_date,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date format. Use YYYY-MM-DD: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/generate-from-selection", response_model=GenerateReportResponse)
+async def generate_report_from_selection(request: GenerateFromSelectionRequest):
+    """Generate a report from a list of selected thread timestamps."""
+    config = get_config()
+    if not request.thread_ts_list:
+        return GenerateReportResponse(
+            success=False,
+            error="No threads selected. Select at least one thread to include in the report.",
+        )
+    try:
+        slack_client = SlackClient(config.slack)
+        status_messages, thread_infos = slack_client.get_threads_by_ts(request.thread_ts_list)
+        if not status_messages:
+            return GenerateReportResponse(
+                success=False,
+                error="Selected threads have no reply messages (status updates).",
+            )
+        if thread_infos:
+            dates = [t['date'] for t in thread_infos]
+            start_date = min(dates)
+            end_date = max(dates)
+            date_range = f"{start_date.strftime('%B %d')} to {end_date.strftime('%B %d, %Y')}"
+        else:
+            date_range = "Selected period"
+        parser = MessageParser()
+        statuses = parser.parse_messages(status_messages)
+        generator = ReportGenerator(
+            sender_name=config.report.sender_name,
+            sender_email=config.report.sender_email,
+            recipients_to=config.report.recipients_to,
+            recipients_cc=config.report.recipients_cc,
+        )
+        report = None
+        if request.use_ai and config.groq.is_available:
+            enhancer = GroqReportEnhancer(config.groq.api_key)
+            raw_texts = [msg.text for msg in status_messages]
+            report = enhancer.enhance_report(
+                raw_texts,
+                date_range=date_range,
+                sender_name=config.report.sender_name,
+            )
+        if not report:
+            report = generator.generate(statuses, request.notes)
+        reports_dir = Path(config.output_dir or "reports")
+        reports_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        filename = f"weekly_report_{timestamp}.txt"
+        filepath = reports_dir / filename
+        filepath.write_text(report)
+        return GenerateReportResponse(
+            success=True,
+            report=report,
+            filename=filename,
+            date_range=date_range,
+            stats={
+                "threads_included": len(thread_infos),
+                "status_messages": len(status_messages),
+                "parsed_statuses": len(statuses),
+            },
+        )
+    except Exception as e:
+        return GenerateReportResponse(success=False, error=str(e))
+
+
 @app.post("/api/generate", response_model=GenerateReportResponse)
 async def generate_report(request: GenerateReportRequest):
     """Generate a weekly report."""
@@ -230,13 +362,24 @@ async def generate_report(request: GenerateReportRequest):
         year = request.year or now.year
         week = request.week or now.isocalendar()[1]
         
-        # Get status updates from daily report threads
-        status_messages, daily_reports = slack_client.get_weekly_status_updates(year, week)
+        # Get status updates from daily report threads (fallback to last 7 days if week is empty)
+        status_messages, daily_reports, diagnostics = slack_client.get_weekly_status_updates(
+            year, week, fallback_days=7
+        )
         
         if not status_messages:
+            start_str = diagnostics["start"].strftime("%Y-%m-%d")
+            end_str = diagnostics["end"].strftime("%Y-%m-%d")
+            threads = diagnostics.get("threads_found", 0)
+            hint = (
+                "No daily report threads found in the channel for this period."
+                if threads == 0
+                else f"Found {threads} daily report thread(s) but no replies (status updates) in them."
+            )
             return GenerateReportResponse(
                 success=False,
-                error="No status updates found in daily report threads for this week.",
+                error=f"{hint} Searched {start_str} to {end_str}. "
+                "Use the Preview tab to see what messages are in the channel, or try a different week.",
             )
         
         # Calculate date range

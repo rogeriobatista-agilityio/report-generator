@@ -28,6 +28,7 @@ import {
   Tabs,
   Tab,
   InputAdornment,
+  Snackbar,
 } from '@mui/material'
 import {
   CheckCircle as CheckIcon,
@@ -75,6 +76,9 @@ export default function Settings({ config, onConfigUpdate }) {
   const [editingRecipient, setEditingRecipient] = useState(null)
   const [recipientForm, setRecipientForm] = useState({ email: '', name: '', type: 'to' })
 
+  // Save feedback
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' })
+
   useEffect(() => {
     fetchData()
   }, [])
@@ -113,18 +117,30 @@ export default function Settings({ config, onConfigUpdate }) {
 
   const handleSaveSettings = async () => {
     setSaving(true)
+    setSnackbar(prev => ({ ...prev, open: false }))
     try {
-      // Save each changed setting
+      let saved = 0
       for (const [key, value] of Object.entries(editedSettings)) {
         if (value !== settings[key]) {
           await axios.put(`/api/settings/${key}`, { value: value || '' })
+          saved += 1
         }
       }
       setSettings(editedSettings)
       setHasChanges(false)
       onConfigUpdate()
+      setSnackbar({
+        open: true,
+        message: saved > 0 ? 'Settings saved to database.' : 'No changes to save.',
+        severity: saved > 0 ? 'success' : 'info',
+      })
     } catch (error) {
       console.error('Failed to save settings:', error)
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.detail || error.message || 'Failed to save settings.',
+        severity: 'error',
+      })
     } finally {
       setSaving(false)
     }
@@ -273,22 +289,32 @@ export default function Settings({ config, onConfigUpdate }) {
 
   return (
     <Box>
-      <Box className="flex items-center justify-between mb-4">
-        <Typography variant="h5" className="font-bold text-gray-800">
-          Settings & Configuration
-        </Typography>
-        {hasChanges && (
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-            onClick={handleSaveSettings}
-            disabled={saving}
-          >
-            Save Changes
-          </Button>
-        )}
+      <Box className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <Box>
+          <Typography variant="h5" className="font-bold text-gray-800">
+            Settings & Configuration
+          </Typography>
+          <Typography variant="body2" color="textSecondary" className="mt-1">
+            All settings are stored in the SQLite database. Edit the fields below and click Save to persist.
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+          onClick={handleSaveSettings}
+          disabled={saving}
+          sx={{ flexShrink: 0 }}
+        >
+          {saving ? 'Saving…' : 'Save to database'}
+        </Button>
       </Box>
+
+      {hasChanges && (
+        <Alert severity="info" className="mb-4" onClose={() => setHasChanges(false)}>
+          You have unsaved changes. Click &quot;Save to database&quot; to store them.
+        </Alert>
+      )}
 
       <Tabs value={tab} onChange={(e, v) => setTab(v)} className="mb-4">
         <Tab label="Slack" icon={<SlackIcon />} iconPosition="start" />
@@ -698,27 +724,20 @@ export default function Settings({ config, onConfigUpdate }) {
         </DialogActions>
       </Dialog>
 
-      {/* Save Changes Banner */}
-      {hasChanges && (
-        <Box className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50">
-          <Alert
-            severity="warning"
-            action={
-              <Button
-                color="inherit"
-                size="small"
-                onClick={handleSaveSettings}
-                disabled={saving}
-                startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
-              >
-                Save Changes
-              </Button>
-            }
-          >
-            You have unsaved changes
-          </Alert>
-        </Box>
-      )}
+      {/* Save feedback */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity={snackbar.severity}
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
 
       {/* Refresh Button */}
       <Box className="mt-6 text-center">

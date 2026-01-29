@@ -20,6 +20,7 @@ class SlackMessage:
     text: str
     timestamp: datetime
     thread_ts: Optional[str] = None
+    ts: Optional[str] = None  # Slack message timestamp ID (for API calls)
     reactions: list[dict] = None
 
     def __post_init__(self):
@@ -119,12 +120,14 @@ class SlackClient:
                     ts = float(msg.get("ts", 0))
                     timestamp = datetime.fromtimestamp(ts)
 
+                    msg_ts = msg.get("ts", "")
                     messages.append(SlackMessage(
                         user_id=user_id,
                         user_name=user.real_name or user.display_name or user.name,
                         text=msg.get("text", ""),
                         timestamp=timestamp,
                         thread_ts=msg.get("thread_ts"),
+                        ts=msg_ts,
                         reactions=msg.get("reactions", []),
                     ))
 
@@ -163,12 +166,14 @@ class SlackClient:
                 ts = float(msg.get("ts", 0))
                 timestamp = datetime.fromtimestamp(ts)
 
+                msg_ts = msg.get("ts", "")
                 messages.append(SlackMessage(
                     user_id=user_id,
                     user_name=user.real_name or user.display_name or user.name,
                     text=msg.get("text", ""),
                     timestamp=timestamp,
                     thread_ts=msg.get("thread_ts"),
+                    ts=msg_ts,
                     reactions=msg.get("reactions", []),
                 ))
 
@@ -279,9 +284,9 @@ class SlackClient:
         """
         import re
         
-        # Pattern to match "Daily report" messages
+        # Pattern to match "Daily report" / status header messages
         daily_report_pattern = re.compile(
-            r"daily\s*report|status\s*update|standup|stand-up",
+            r"daily\s*report|daily\s*update|status\s*update|standup|stand-up|weekly\s*report",
             re.IGNORECASE
         )
         
@@ -293,40 +298,72 @@ class SlackClient:
         for msg in messages:
             # Check if this is a daily report header message
             if daily_report_pattern.search(msg.text):
-                # Get the thread timestamp (use message ts if no thread_ts)
-                thread_ts = msg.thread_ts or str(msg.timestamp.timestamp())
+                # Use message ts for thread (top-level message ts = thread_ts)
+                thread_ts = msg.ts or msg.thread_ts or str(msg.timestamp.timestamp())
                 
                 # Fetch all thread replies
                 thread_messages = self.get_thread_messages(thread_ts)
                 
-                # Separate header from replies (first message is the header)
-                replies = [m for m in thread_messages if m.timestamp != msg.timestamp]
+                # Exclude header: same ts as thread parent
+                replies = [m for m in thread_messages if (m.ts or "") != thread_ts]
                 
                 # Try to parse the report date from the message content
-                # e.g., "Daily report - Jan 19, 2026"
                 report_date = self._parse_date_from_text(msg.text)
                 if report_date is None:
-                    # Fallback to message timestamp
                     report_date = msg.timestamp
                 
                 daily_reports.append({
                     'header': msg,
                     'replies': replies,
                     'date': report_date,
+                    'thread_ts': thread_ts,
                 })
         
         return daily_reports
 
-    def get_weekly_status_updates(self, year: int = None, week_number: int = None) -> list[SlackMessage]:
+    def get_threads_by_ts(
+        self, thread_ts_list: list[str]
+    ) -> tuple[list[SlackMessage], list[dict]]:
+        """
+        Fetch full thread content for a list of thread timestamps.
+        Returns (all reply messages from selected threads, thread info list).
+        """
+        all_replies = []
+        thread_infos = []
+        for thread_ts in thread_ts_list:
+            thread_messages = self.get_thread_messages(thread_ts)
+            if not thread_messages:
+                continue
+            # First message is the parent; rest are replies
+            parent_ts = thread_messages[0].ts or thread_ts
+            replies = [m for m in thread_messages if (m.ts or "") != parent_ts]
+            all_replies.extend(replies)
+            header = thread_messages[0]
+            report_date = self._parse_date_from_text(header.text) or header.timestamp
+            thread_infos.append({
+                'thread_ts': thread_ts,
+                'date': report_date,
+                'reply_count': len(replies),
+            })
+        all_replies.sort(key=lambda m: m.timestamp)
+        return all_replies, thread_infos
+
+    def get_weekly_status_updates(
+        self,
+        year: int = None,
+        week_number: int = None,
+        fallback_days: int = None,
+    ) -> tuple[list[SlackMessage], list[dict], dict]:
         """
         Get all status updates from daily report threads for a specific week.
         
         Args:
             year: The year (default: current year)
             week_number: ISO week number (default: current week)
+            fallback_days: If no threads found for the week, search this many days back (default: 7)
             
         Returns:
-            Tuple of (all status update messages, daily report threads)
+            Tuple of (all status update messages, daily report threads, diagnostics dict)
         """
         from datetime import date
         
@@ -337,27 +374,43 @@ class SlackClient:
             week_number = now.isocalendar()[1]
         
         # Calculate week date range using ISO week
-        # Find January 4th of the year (always in week 1)
         jan4 = date(year, 1, 4)
-        # Find the Monday of week 1
         week1_monday = jan4 - timedelta(days=jan4.weekday())
-        # Calculate the Monday of the requested week
         first_day = datetime.combine(
             week1_monday + timedelta(weeks=week_number - 1),
             datetime.min.time()
         )
-        last_day = first_day + timedelta(days=6)  # Include weekend posts
+        last_day = first_day + timedelta(days=6)
         last_day = last_day.replace(hour=23, minute=59, second=59, microsecond=999999)
         
-        # Find all daily report threads
+        diagnostics = {
+            "year": year,
+            "week": week_number,
+            "start": first_day,
+            "end": last_day,
+            "used_fallback": False,
+        }
+        
         daily_reports = self.find_daily_report_threads(first_day, last_day)
         
-        # Collect all thread replies (the actual status updates)
+        # If no threads found and fallback requested, try last N days
+        if not daily_reports and fallback_days:
+            fallback_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+            fallback_start = fallback_end - timedelta(days=fallback_days)
+            fallback_start = fallback_start.replace(hour=0, minute=0, second=0, microsecond=0)
+            daily_reports = self.find_daily_report_threads(fallback_start, fallback_end)
+            if daily_reports:
+                diagnostics["used_fallback"] = True
+                diagnostics["start"] = fallback_start
+                diagnostics["end"] = fallback_end
+                diagnostics["fallback_days"] = fallback_days
+        
         all_updates = []
         for report in daily_reports:
             all_updates.extend(report['replies'])
         
-        # Sort by timestamp
         all_updates.sort(key=lambda m: m.timestamp)
+        diagnostics["threads_found"] = len(daily_reports)
+        diagnostics["replies_found"] = len(all_updates)
         
-        return all_updates, daily_reports
+        return all_updates, daily_reports, diagnostics

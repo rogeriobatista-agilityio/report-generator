@@ -20,11 +20,13 @@ import {
   Error as ErrorIcon,
   Chat as SlackIcon,
   Psychology as AIIcon,
+  CalendarMonth as CalendarIcon,
 } from '@mui/icons-material'
 import axios from 'axios'
 
 import Dashboard from './components/Dashboard'
 import ReportGenerator from './components/ReportGenerator'
+import CustomReport from './components/CustomReport'
 import ReportViewer from './components/ReportViewer'
 import EmailSender from './components/EmailSender'
 import Settings from './components/Settings'
@@ -103,12 +105,12 @@ export default function App() {
 
   const handleReportGenerated = (filename) => {
     setSelectedReport(filename)
-    setTab(2) // Switch to Reports tab
+    setTab(3) // Switch to Reports tab (0=Dashboard, 1=Generate, 2=Custom Report, 3=Reports, 4=Send Email, 5=Settings)
   }
 
   const handleSendEmail = (filename) => {
     setSelectedReport(filename)
-    setTab(3) // Switch to Email tab
+    setTab(4) // Switch to Send Email tab
   }
 
   return (
@@ -186,6 +188,7 @@ export default function App() {
           >
             <Tab icon={<DashboardIcon />} label="Dashboard" iconPosition="start" />
             <Tab icon={<ReportIcon />} label="Generate" iconPosition="start" />
+            <Tab icon={<CalendarIcon />} label="Custom Report" iconPosition="start" />
             <Tab icon={<ReportIcon />} label="Reports" iconPosition="start" />
             <Tab icon={<EmailIcon />} label="Send Email" iconPosition="start" />
             <Tab icon={<SettingsIcon />} label="Settings" iconPosition="start" />
@@ -207,20 +210,27 @@ export default function App() {
         </TabPanel>
         
         <TabPanel value={tab} index={2}>
+          <CustomReport 
+            config={config} 
+            onReportGenerated={handleReportGenerated}
+          />
+        </TabPanel>
+        
+        <TabPanel value={tab} index={3}>
           <ReportViewer 
             selectedReport={selectedReport}
             onSendEmail={handleSendEmail}
           />
         </TabPanel>
         
-        <TabPanel value={tab} index={3}>
+        <TabPanel value={tab} index={4}>
           <EmailSender 
             config={config}
             selectedReport={selectedReport}
           />
         </TabPanel>
         
-        <TabPanel value={tab} index={4}>
+        <TabPanel value={tab} index={5}>
           <Settings config={config} onConfigUpdate={fetchConfig} />
         </TabPanel>
       </Container>

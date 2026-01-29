@@ -96,16 +96,25 @@ def generate(week: int, year: int, output: str, ai: bool, notes: tuple):
         
         progress.update(task, description="Fetching daily report threads from Slack...")
         
-        # Get status updates from daily report threads
-        status_messages, daily_reports = slack_client.get_weekly_status_updates(year, week)
+        # Get status updates from daily report threads (fallback to last 7 days if week is empty)
+        status_messages, daily_reports, diagnostics = slack_client.get_weekly_status_updates(
+            year, week, fallback_days=7
+        )
         
+        if diagnostics.get("used_fallback"):
+            console.print("[dim]No threads for the requested week; used last 7 days.[/dim]")
         console.print(f"\n✓ Found [green]{len(daily_reports)}[/green] daily report threads")
         console.print(f"✓ Found [green]{len(status_messages)}[/green] status update messages")
 
         if not status_messages:
-            console.print("[yellow]No status updates found in daily report threads.[/yellow]")
+            threads = diagnostics.get("threads_found", 0)
+            if threads == 0:
+                console.print("[yellow]No daily report threads found for this period.[/yellow]")
+            else:
+                console.print(f"[yellow]Found {threads} thread(s) but no replies in them.[/yellow]")
             console.print("Make sure daily reports are posted with 'Daily report' in the message,")
             console.print("and team members reply with their status updates in the thread.")
+            console.print("Try: python main.py preview --days 7")
             return
 
         # Parse status updates

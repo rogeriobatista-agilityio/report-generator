@@ -59,9 +59,13 @@ export default function ReportGenerator({ config, onReportGenerated }) {
         onReportGenerated(response.data.filename)
       }
     } catch (error) {
+      const message =
+        error.response?.data?.error ||
+        error.response?.data?.detail ||
+        error.message
       setResult({
         success: false,
-        error: error.response?.data?.detail || error.message,
+        error: typeof message === 'string' ? message : JSON.stringify(message),
       })
     } finally {
       setLoading(false)

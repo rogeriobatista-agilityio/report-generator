@@ -92,8 +92,16 @@ class SettingsManager:
     }
     
     @classmethod
+    def key_in_db(cls, key: str) -> bool:
+        """Return True if the key exists in the database (even with empty value)."""
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM settings WHERE key = ?", (key,))
+            return cursor.fetchone() is not None
+
+    @classmethod
     def get(cls, key: str, default: str = None) -> Optional[str]:
-        """Get a setting value."""
+        """Get a setting value. Uses DB first, then default/DEFAULTS."""
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
