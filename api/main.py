@@ -320,7 +320,8 @@ async def generate_report_from_selection(request: GenerateFromSelectionRequest):
         report = None
         if request.use_ai and config.groq.is_available:
             enhancer = GroqReportEnhancer(config.groq.api_key)
-            raw_texts = [msg.text for msg in status_messages]
+            # Include author with each message so AI attributes items to the right person
+            raw_texts = [f"--- From: {msg.user_name} ---\n\n{msg.text}" for msg in status_messages]
             report = enhancer.enhance_report(
                 raw_texts,
                 date_range=date_range,
@@ -407,7 +408,8 @@ async def generate_report(request: GenerateReportRequest):
         report = None
         if request.use_ai and config.groq.is_available:
             enhancer = GroqReportEnhancer(config.groq.api_key)
-            raw_texts = [msg.text for msg in status_messages]
+            # Include author with each message so AI attributes items to the right person
+            raw_texts = [f"--- From: {msg.user_name} ---\n\n{msg.text}" for msg in status_messages]
             report = enhancer.enhance_report(
                 raw_texts,
                 date_range=date_range,

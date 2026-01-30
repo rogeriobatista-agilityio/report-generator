@@ -421,24 +421,25 @@ Please find below the End of Week Update covering the period from {date_range}:
 2. DONE
 Feature Development
 
-[List completed features with format: V2-XXX: Description - PR #YYY ready for review - @AssigneeName]
+[List completed features with format: V2-XXX: Description - PR #YYY ready for review - @ActualPersonName]
+Example: V2-749: Add export feature - PR #123 ready for review - @Rogerio Batista
 
 Code & Infrastructure
 
-[List infrastructure/code improvements with format: Description - @AssigneeName]
+[List infrastructure/code improvements with format: Description - @ActualPersonName]
 
 Bug Fixes
 
-[List bug fixes if any, with format: V2-XXX: Description - @AssigneeName]
+[List bug fixes if any, with format: V2-XXX: Description - @ActualPersonName]
 
 3. IN PROGRESS
-[List items currently being worked on with format: V2-XXX: Description - @AssigneeName]
+[List items currently being worked on with format: V2-XXX: Description - @ActualPersonName]
 
 4. NEXT PLAN
-[List planned items with format: Description - @AssigneeName]
+[List planned items with format: Description - @ActualPersonName]
 
 5. QUESTIONS/BLOCKERS
-[List any questions or blockers with format: V2-XXX: Question/blocker description - @AssigneeName]
+[List any questions or blockers with format: V2-XXX: Question/blocker description - @ActualPersonName]
 [If no blockers: "No blockers this week"]
 
 Please let us know if you have any questions or concerns.
@@ -447,24 +448,26 @@ Thanks and Best regards,
 {sender_name}
 
 ## RULES:
-1. Extract ticket IDs (V2-XXX format) and include them
-2. Extract PR numbers and format as "PR #XXX"
-3. Include @AssigneeName for each item (extract from the status updates)
-4. Group DONE items by category: Feature Development, Code & Infrastructure, Bug Fixes
-5. Deduplicate - if same ticket appears multiple days, only list once in most appropriate section
-6. Items marked "Ready for review" or "Ready for release" go in DONE
-7. Items marked "In Progress" go in IN PROGRESS
-8. Items marked "Next plan" go in NEXT PLAN
-9. Items marked "Questions" or "Blockers" go in QUESTIONS/BLOCKERS
-10. Keep descriptions concise but informative
-11. Remove Slack formatting like <URL|text> - just keep the text
-12. Do NOT include empty categories
+1. The raw updates below are from MULTIPLE team members. Each block starts with "--- From: [Person Name] ---". You MUST include items from EVERY person who appears. Do not list only one person's items; the report must reflect the whole team.
+2. Attribute each item to the person who wrote that block (the name after "--- From: ") unless the item explicitly @mentions someone else. Use "@" followed by their name (e.g. @Binh Huynh, @Rogerio Batista).
+3. Extract ticket IDs (V2-XXX format) and include them
+4. Extract PR numbers and format as "PR #XXX"
+5. NEVER output the literal "AssigneeName" or "@AssigneeName" - always use the actual name from the "--- From: ... ---" blocks or from @mentions in the text.
+6. Group DONE items by category: Feature Development, Code & Infrastructure, Bug Fixes
+7. Deduplicate - if same ticket appears multiple days, only list once in most appropriate section
+8. Items marked "Ready for review" or "Ready for release" go in DONE
+9. Items marked "In Progress" go in IN PROGRESS
+10. Items marked "Next plan" go in NEXT PLAN
+11. Items marked "Questions" or "Blockers" go in QUESTIONS/BLOCKERS
+12. Keep descriptions concise but informative
+13. Remove Slack formatting like <URL|text> - just keep the text
+14. Do NOT include empty categories
 
-## RAW STATUS UPDATES FROM THE WEEK:
+## RAW STATUS UPDATES FROM THE WEEK (each block is from a different team member):
 
 {chr(10).join(raw_messages)}
 
-Generate the report now:"""
+Generate the report now. Include items from ALL team members listed above; use each person's name (e.g. @Binh Huynh, @Rogerio Batista) for their items."""
 
         try:
             response = self.client.chat.completions.create(

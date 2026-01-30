@@ -137,7 +137,8 @@ def generate(week: int, year: int, output: str, ai: bool, notes: tuple):
         if ai and config.groq.is_available:
             progress.update(task, description="Enhancing report with Groq AI...")
             enhancer = GroqReportEnhancer(config.groq.api_key)
-            raw_texts = [msg.text for msg in status_messages]
+            # Include author with each message so AI attributes items to the right person
+            raw_texts = [f"--- From: {msg.user_name} ---\n\n{msg.text}" for msg in status_messages]
             
             # Calculate date range from daily reports
             if daily_reports:
